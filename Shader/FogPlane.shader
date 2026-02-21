@@ -13,6 +13,8 @@ Shader "InPlanaria/SimpleFog/FogPlane"
         _Start_onLinear ("Fog Start Distance (Linear Only)", Float) = 0.0
         _End_onLinear ("Fog End Distance (Linear Only)", Float) = 100.0
         _StrengthOnSkybox ("Strength On Skybox", Range(0, 1)) = 1
+
+        
         
 
         [Enum(UnityEngine.Rendering.CompareFunction)] _ZTest ("ZTest", Int) = 4
@@ -117,20 +119,7 @@ Shader "InPlanaria/SimpleFog/FogPlane"
                 // ローカルスペースでカメラ位置を取得
                 float3 cameraLocalPos = mul(unity_WorldToObject, float4(SAF_GetStereoSafeWorldSpaceCameraPos(), 1.0)).xyz;
                 
-                // カメラから各面までの距離（ローカルスペース）
-                float distX = 0.5 - abs(cameraLocalPos.x);
-                float distY = 0.5 - abs(cameraLocalPos.y);
-                float distZ = 0.5 - abs(cameraLocalPos.z);
-                float minDistLocal = min(min(distX, distY), distZ);
-                
-                // ローカルスペースの距離をワールドスペースに変換
-                float scaleX = length(mul(unity_ObjectToWorld, float4(1, 0, 0, 0)).xyz);
-                float scaleY = length(mul(unity_ObjectToWorld, float4(0, 1, 0, 0)).xyz);
-                float scaleZ = length(mul(unity_ObjectToWorld, float4(0, 0, 1, 0)).xyz);
-                float avgScale = (scaleX + scaleY + scaleZ) / 3.0;
-                float minDistWorld = minDistLocal * avgScale;
-                
-                
+                              
                 // 深度バッファから背景までの距離を取得
                 float2 screenUV = i.projPos.xy / i.projPos.w;
                 float sceneDepth = LinearEyeDepth(UNITY_SAMPLE_SCREENSPACE_TEXTURE(_CameraDepthTexture, screenUV));
