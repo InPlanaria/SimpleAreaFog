@@ -1,4 +1,4 @@
-Shader "InPlanaria/SimpleVolumetric/FogFakeLightSphere"
+Shader "InPlanaria/SimpleFog/FogFakeLightSphere"
 {
     Properties
     {
@@ -35,7 +35,7 @@ Shader "InPlanaria/SimpleVolumetric/FogFakeLightSphere"
     }
     SubShader
     {
-        Tags { "Queue"="Transparent+98" "RenderType"="Transparent" "IgnoreProjector"="True" }
+        Tags { "Queue"="Transparent+98" "RenderType"="Overlay" "IgnoreProjector"="True" }
         
         // 設定: 両面描画、深度テスト常にパス、書き込みなし
         Cull [_Cull]

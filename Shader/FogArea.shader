@@ -1,4 +1,4 @@
-Shader "InPlanaria/SimpleVolumetric/FogArea"
+Shader "InPlanaria/SimpleFog/FogArea"
 {
     Properties
     {
@@ -29,7 +29,7 @@ Shader "InPlanaria/SimpleVolumetric/FogArea"
     }
     SubShader
     {
-        Tags { "Queue"="Transparent+190" "RenderType"="Transparent" "IgnoreProjector"="True" }
+        Tags { "Queue"="Transparent+190" "RenderType"="Overlay" "IgnoreProjector"="True" }
         
         // 設定: 両面描画、深度テスト常にパス、書き込みなし
         Cull Front
