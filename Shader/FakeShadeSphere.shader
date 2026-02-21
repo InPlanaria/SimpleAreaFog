@@ -4,7 +4,7 @@ Shader "InPlanaria/SimpleFog/FakeShadeSphere"
     {
         [HDR]_Color ("Color", Color) = (0,0,0,1)
 
-        _FakeShadeStrength ("Fake Reflection Strength", Range(0, 5)) = 1.0
+        _FakeShadeStrength ("Fake Reflection Strength", float) = 1.0
         
 
         

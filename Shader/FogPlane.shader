@@ -9,7 +9,7 @@ Shader "InPlanaria/SimpleFog/FogPlane"
 
         [KeywordEnum(Linear, Exponential, ExponentialSquared)] _FogMode ("Fog Mode", Int) = 1
 
-        _Strength ("Strength (Exponential Modes)", Range(0, 5)) = 0.002
+        _Strength ("Strength (Exponential Modes)", float) = 0.002
         _Start_onLinear ("Fog Start Distance (Linear Only)", Float) = 0.0
         _End_onLinear ("Fog End Distance (Linear Only)", Float) = 100.0
         _StrengthOnSkybox ("Strength On Skybox", Range(0, 1)) = 1

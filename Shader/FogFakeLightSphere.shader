@@ -6,11 +6,11 @@ Shader "InPlanaria/SimpleFog/FogFakeLightSphere"
         
         [Toggle( _Halo_ON )] _Halo ("Use Halo", Float) = 1.0
         [HDR]_HaloColor ("Halo Color", Color) = (1,1,1,1)
-        _HaloStrength ("Halo Strength", Range(0, 5)) = 1
-        _HaloMeshEdgeFade ("Halo Mesh Edge Fade", Range(0, 5)) = 0.1
+        _HaloStrength ("Halo Strength", float) = 1
+        _HaloMeshEdgeFade ("Halo Mesh Edge Fade", float) = 0.1
 
         [Toggle( _FakeReflection_ON )] _FakeReflection ("Use Fake Reflection", Float) = 1
-        _FakeReflectionStrength ("Fake Reflection Strength", Range(0, 5)) = 0.5
+        _FakeReflectionStrength ("Fake Reflection Strength", float) = 0.5
 
         [Toggle( _FakeReflectSpotMode_ON )] _FakeReflectionSpot ("Use Fake Reflection Spot", Float) = 0
         _FakeReflectionSpotAngle ("Fake Reflection SpotAngle", Range(0, 360)) = 60.0

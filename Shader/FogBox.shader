@@ -4,8 +4,8 @@ Shader "InPlanaria/SimpleFog/FogBox"
     {
         [HDR]_Color ("Fog Color", Color) = (1,1,1,1)
         [KeywordEnum(Linear, Exponential, ExponentialSquared)] _FogMode ("Fog Mode", Int) = 0
-        _Strength ("Strength", Range(0, 5)) = 0.002
-        _EdgeFade ("Edge Fade", Range(0, 5)) = 1
+        _Strength ("Strength", float) = 0.002
+        _EdgeFade ("Edge Fade", float) = 1
         
 
         [Enum(UnityEngine.Rendering.CompareFunction)] _ZTest ("ZTest", Int) = 8
