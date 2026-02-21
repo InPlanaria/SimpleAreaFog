@@ -54,6 +54,7 @@ Shader "InPlanaria/SimpleFog/FogSphere"
             #pragma multi_compile _ LOD_FADE_CROSSFADE
             #pragma multi_compile_local _FOGMODE_LINEAR _FOGMODE_EXPONENTIAL _FOGMODE_EXPONENTIALSQUARED
             #include "UnityCG.cginc"
+            #include "SimpleAreaFogCommon.cginc"
 
             struct appdata
             {
@@ -90,7 +91,7 @@ Shader "InPlanaria/SimpleFog/FogSphere"
                 
                 // モデル空間でのカメラ位置と頂点方向を計算
                 // これにより、Scale 1.0 = 半径0.5m の球体として計算可能
-                o.rayOrigin = mul(unity_WorldToObject, float4(_WorldSpaceCameraPos, 1.0)).xyz;
+                o.rayOrigin = mul(unity_WorldToObject, float4(SAF_GetStereoSafeWorldSpaceCameraPos(), 1.0)).xyz;
                 o.viewDir = v.vertex.xyz - o.rayOrigin;
                 
                 return o;

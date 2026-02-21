@@ -51,6 +51,7 @@ Shader "InPlanaria/SimpleFog/FakeShadeSphere"
             #pragma vertex vert
             #pragma fragment frag
             #include "UnityCG.cginc"
+            #include "SimpleAreaFogCommon.cginc"
 
             #pragma multi_compile _ LOD_FADE_CROSSFADE
             #pragma multi_compile_instancing
@@ -92,7 +93,7 @@ Shader "InPlanaria/SimpleFog/FakeShadeSphere"
                 o.pos = UnityObjectToClipPos(v.vertex);
                 o.projPos = ComputeScreenPos(o.pos);
                 // モデル空間でのカメラ位置と頂点方向を計算
-                o.rayOrigin = mul(unity_WorldToObject, float4(_WorldSpaceCameraPos, 1.0)).xyz;
+                o.rayOrigin = mul(unity_WorldToObject, float4(SAF_GetStereoSafeWorldSpaceCameraPos(), 1.0)).xyz;
                 o.viewDir = v.vertex.xyz - o.rayOrigin;
                 o.normal = v.normal;
                 return o;

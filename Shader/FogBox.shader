@@ -54,6 +54,7 @@ Shader "InPlanaria/SimpleFog/FogBox"
             #pragma multi_compile _ LOD_FADE_CROSSFADE
             #pragma multi_compile_local _FOGMODE_LINEAR _FOGMODE_EXPONENTIAL _FOGMODE_EXPONENTIALSQUARED
             #include "UnityCG.cginc"
+            #include "SimpleAreaFogCommon.cginc"
 
             struct appdata
             {
@@ -90,7 +91,7 @@ Shader "InPlanaria/SimpleFog/FogBox"
                 
                 // モデル空間でのカメラ位置と頂点方向を計算
                 // これにより、Scale 1.0 = 辺1mのボックスとして計算可能
-                o.rayOrigin = mul(unity_WorldToObject, float4(_WorldSpaceCameraPos, 1.0)).xyz;
+                o.rayOrigin = mul(unity_WorldToObject, float4(SAF_GetStereoSafeWorldSpaceCameraPos(), 1.0)).xyz;
                 o.viewDir = v.vertex.xyz - o.rayOrigin;
                 
                 return o;

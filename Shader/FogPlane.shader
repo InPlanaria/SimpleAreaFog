@@ -62,6 +62,7 @@ Shader "InPlanaria/SimpleFog/FogPlane"
             #pragma multi_compile_local _FOGMODE_LINEAR _FOGMODE_EXPONENTIAL _FOGMODE_EXPONENTIALSQUARED
             #pragma multi_compile_instancing
             #include "UnityCG.cginc"
+            #include "SimpleAreaFogCommon.cginc"
 
             struct appdata
             {
@@ -96,7 +97,7 @@ Shader "InPlanaria/SimpleFog/FogPlane"
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
 
                 //// カメラがCubeの外にいる場合、頂点を退化させて描画をスキップ
-                //float3 cameraLocalPos = mul(unity_WorldToObject, float4(_WorldSpaceCameraPos, 1.0)).xyz;
+                //float3 cameraLocalPos = mul(unity_WorldToObject, float4(SAF_GetStereoSafeWorldSpaceCameraPos(), 1.0)).xyz;
                 //float3 absCameraPos = abs(cameraLocalPos);
                 //bool outsideCube = (absCameraPos.x > 0.5 || absCameraPos.y > 0.5 || absCameraPos.z > 0.5);
 
@@ -114,7 +115,7 @@ Shader "InPlanaria/SimpleFog/FogPlane"
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
 
                 // ローカルスペースでカメラ位置を取得
-                float3 cameraLocalPos = mul(unity_WorldToObject, float4(_WorldSpaceCameraPos, 1.0)).xyz;
+                float3 cameraLocalPos = mul(unity_WorldToObject, float4(SAF_GetStereoSafeWorldSpaceCameraPos(), 1.0)).xyz;
                 
                 // カメラから各面までの距離（ローカルスペース）
                 float distX = 0.5 - abs(cameraLocalPos.x);
