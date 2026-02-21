@@ -10,6 +10,7 @@ Shader "InPlanaria/SimpleFog/FogPlane"
         [KeywordEnum(Linear, Exponential, ExponentialSquared)] _FogMode ("Fog Mode", Int) = 1
 
         _Strength ("Strength (Exponential Modes)", float) = 0.002
+        _SoftParticle ("Soft Particle", Float) = 1.0
         _Start_onLinear ("Fog Start Distance (Linear Only)", Float) = 0.0
         _End_onLinear ("Fog End Distance (Linear Only)", Float) = 100.0
         _StrengthOnSkybox ("Strength On Skybox", Range(0, 1)) = 1
@@ -85,6 +86,7 @@ Shader "InPlanaria/SimpleFog/FogPlane"
             float _FarColorStart;
             float _FarColorEnd;
             float _Strength;
+            float _SoftParticle;
             float _StrengthOnSkybox;
             int _FogMode;
             float _Start_onLinear;
@@ -123,6 +125,7 @@ Shader "InPlanaria/SimpleFog/FogPlane"
                 // 深度バッファから背景までの距離を取得
                 float2 screenUV = i.projPos.xy / i.projPos.w;
                 float sceneDepth = LinearEyeDepth(UNITY_SAMPLE_SCREENSPACE_TEXTURE(_CameraDepthTexture, screenUV));
+                float pixelDepth = LinearEyeDepth(i.projPos.z / i.projPos.w);
                 
                 // sceneDepthに1/cosΘをかける。Θはレイとカメラ方向のなす角。
                 // ローカルスペースでのレイ方向をワールド空間に変換してカメラ前方との角度を計算
@@ -132,6 +135,10 @@ Shader "InPlanaria/SimpleFog/FogPlane"
                 float cosTheta = abs(dot(rd_world, camForward));
                 sceneDepth *= 1.0 / max(cosTheta, 0.001); // ゼロ除算対策
                 sceneDepth = max(sceneDepth, 0.0); // 負の深度を防止
+
+                // Soft particle: 背景との距離が近いほど透明化
+                float depthDiff = max(sceneDepth - pixelDepth, 0.0);
+                float softParticleFactor = saturate(depthDiff / max(_SoftParticle, 1e-5));
 
                 // フォグモードに応じて濃さを計算
                 float fogAmount = 0.0;
@@ -164,7 +171,7 @@ Shader "InPlanaria/SimpleFog/FogPlane"
                 // Interpolate between Fog Color and Far Fog Color based on depth range
                 float farColorBlend = saturate((sceneDepth - _FarColorStart) / max(_FarColorEnd - _FarColorStart, 0.001));
                 fixed4 col = lerp(_NearColor, _FarColor, farColorBlend);
-                col.a = saturate(fogAmount) * col.a;
+                col.a = saturate(fogAmount) * softParticleFactor * col.a;
                 return col;
             }
             ENDCG
