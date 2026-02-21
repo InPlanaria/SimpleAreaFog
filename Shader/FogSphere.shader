@@ -9,7 +9,7 @@ Shader "InPlanaria/SimpleVolumetric/FogSphere"
         
 
         [Enum(UnityEngine.Rendering.CompareFunction)] _ZTest ("ZTest", Int) = 8
-        [Enum(UnityEngine.Rendering.CullMode)] _Cull ("Cull Mode", Int) = 2
+        [Enum(UnityEngine.Rendering.CullMode)] _Cull ("Cull Mode", Int) = 1
         
         [Enum(UnityEngine.Rendering.BlendMode)] _BlendSrcMode ("Blend Src Mode", Int) = 5
         [Enum(UnityEngine.Rendering.BlendMode)] _BlendDstMode ("Blend Dst Mode", Int) = 10
