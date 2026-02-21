@@ -11,7 +11,8 @@ Material:
   m_Shader: {fileID: 4800000, guid: 09368f65368fa4546a0dc4d2b2d9c061, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
-  m_ValidKeywords: []
+  m_ValidKeywords:
+  - _FOGMODE_LINEAR
   m_InvalidKeywords: []
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 1
@@ -37,6 +38,7 @@ Material:
     - _Density: 0.001
     - _DstBlend: 8
     - _EdgeFade: 5
+    - _FogMode: 0
     - _MaxAlpha: 1
     - _MinAlpha: 0
     - _SrcBlend: 7
