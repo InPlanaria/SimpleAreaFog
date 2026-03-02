@@ -33,6 +33,130 @@ Shader "InPlanaria/SimpleFog/FogPlane"
         [Enum(UnityEngine.Rendering.StencilOp)] _StencilFail ("Stencil Fail", Int) = 0
         [Enum(UnityEngine.Rendering.StencilOp)] _StencilZFail ("Stencil ZFail", Int) = 0
     }
+    // URP SubShader
+    SubShader
+    {
+        Tags { "Queue"="Transparent+190" "RenderType"="Overlay" "IgnoreProjector"="True" "RenderPipeline"="UniversalPipeline" }
+
+        Cull [_Cull]
+        ZTest [_ZTest]
+        ZWrite Off
+        ZClip Off
+        BlendOp [_BlendOp]
+
+        Blend [_BlendSrcMode] [_BlendDstMode]
+
+        Stencil
+        {
+            Ref [_StencilRef]
+            ReadMask [_StencilReadMask]
+            WriteMask [_StencilWriteMask]
+            Comp [_StencilComp]
+            Pass [_StencilOp]
+            Fail [_StencilFail]
+            ZFail [_StencilZFail]
+        }
+
+        Pass
+        {
+            Tags { "LightMode"="UniversalForward" }
+
+            HLSLPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma multi_compile_local _FOGMODE_LINEAR _FOGMODE_EXPONENTIAL _FOGMODE_EXPONENTIALSQUARED
+            #pragma multi_compile_instancing
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "SimpleAreaFogDepth.hlsl"
+            #include "SimpleAreaFogCommon.cginc"
+
+            struct appdata
+            {
+                float4 vertex : POSITION;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+            };
+
+            struct v2f
+            {
+                float4 pos : SV_POSITION;
+                float4 projPos : TEXCOORD0;
+                float3 localPos : TEXCOORD1;
+                UNITY_VERTEX_OUTPUT_STEREO
+            };
+
+            CBUFFER_START(UnityPerMaterial)
+                half4 _NearColor;
+                half4 _FarColor;
+                float _FarColorStart;
+                float _FarColorEnd;
+                float _Strength;
+                float _SoftParticle;
+                float _StrengthOnSkybox;
+                float _Start_onLinear;
+                float _End_onLinear;
+            CBUFFER_END
+
+            v2f vert (appdata v)
+            {
+                v2f o;
+                UNITY_SETUP_INSTANCE_ID(v);
+                UNITY_INITIALIZE_OUTPUT(v2f, o);
+                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
+                o.pos = TransformObjectToHClip(v.vertex.xyz);
+                o.projPos = ComputeScreenPos(o.pos);
+                o.localPos = v.vertex.xyz;
+                return o;
+            }
+
+            half4 frag (v2f i) : SV_Target
+            {
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
+
+                float3 cameraLocalPos = mul(unity_WorldToObject, float4(SAF_GetStereoSafeWorldSpaceCameraPos(), 1.0)).xyz;
+
+                float2 screenUV = i.projPos.xy / i.projPos.w;
+                float sceneDepth = SAF_SampleDepthEye(screenUV);
+                float pixelDepth = LinearEyeDepth(i.projPos.z / i.projPos.w, _ZBufferParams);
+
+                float3 localViewDir = i.localPos - cameraLocalPos;
+                float3 rd_world = normalize(mul(unity_ObjectToWorld, float4(localViewDir, 0)).xyz);
+                float3 camForward = -UNITY_MATRIX_V[2].xyz;
+                float cosTheta = abs(dot(rd_world, camForward));
+                sceneDepth *= 1.0 / max(cosTheta, 0.001);
+                sceneDepth = max(sceneDepth, 0.0);
+
+                float depthDiff = max(sceneDepth - pixelDepth, 0.0);
+                float softParticleFactor = saturate(depthDiff / max(_SoftParticle, 1e-5));
+
+                float fogAmount = 0.0;
+
+                #ifdef _FOGMODE_LINEAR
+                {
+                    fogAmount = saturate((sceneDepth - _Start_onLinear) / max(_End_onLinear - _Start_onLinear, 1e-5));
+                }
+                #elif _FOGMODE_EXPONENTIAL
+                {
+                    fogAmount = 1.0 - exp(-_Strength * sceneDepth);
+                }
+                #elif _FOGMODE_EXPONENTIALSQUARED
+                {
+                    fogAmount = 1.0 - exp(-_Strength * sceneDepth * sceneDepth);
+                }
+                #endif
+
+                float skyboxT = saturate((sceneDepth - _ProjectionParams.z * 0.94) / (_ProjectionParams.z * 0.06));
+                fogAmount *= lerp(1.0, _StrengthOnSkybox, skyboxT);
+
+                float farColorBlend = saturate((sceneDepth - _FarColorStart) / max(_FarColorEnd - _FarColorStart, 0.001));
+                half4 col = lerp(_NearColor, _FarColor, farColorBlend);
+                col.a = saturate(fogAmount) * softParticleFactor * col.a;
+                return col;
+            }
+            ENDHLSL
+        }
+    }
+
+    // Built-in SubShader
     SubShader
     {
         Tags { "Queue"="Transparent+190" "RenderType"="Overlay" "IgnoreProjector"="True" }

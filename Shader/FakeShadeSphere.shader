@@ -23,6 +23,137 @@ Shader "InPlanaria/SimpleFog/FakeShadeSphere"
         [Enum(UnityEngine.Rendering.StencilOp)] _StencilFail ("Stencil Fail", Int) = 0
         [Enum(UnityEngine.Rendering.StencilOp)] _StencilZFail ("Stencil ZFail", Int) = 0
     }
+    // URP SubShader
+    SubShader
+    {
+        Tags { "Queue"="Transparent+99" "RenderType"="Overlay" "IgnoreProjector"="True" "RenderPipeline"="UniversalPipeline" }
+
+        Cull [_Cull]
+        ZTest [_ZTest]
+        ZWrite Off
+        BlendOp [_BlendOp]
+        Blend [_BlendSrcMode] [_BlendDstMode]
+
+        Stencil
+        {
+            Ref [_StencilRef]
+            ReadMask [_StencilReadMask]
+            WriteMask [_StencilWriteMask]
+            Comp [_StencilComp]
+            Pass [_StencilOp]
+            Fail [_StencilFail]
+            ZFail [_StencilZFail]
+        }
+
+        Pass
+        {
+            Tags { "LightMode"="UniversalForward" }
+
+            HLSLPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma multi_compile _ LOD_FADE_CROSSFADE
+            #pragma multi_compile_instancing
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "SimpleAreaFogDepth.hlsl"
+            #include "SimpleAreaFogCommon.cginc"
+
+            struct appdata
+            {
+                float4 vertex : POSITION;
+                float3 normal : NORMAL;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+            };
+
+            struct v2f
+            {
+                float4 pos : SV_POSITION;
+                float4 projPos : TEXCOORD0;
+                float3 viewDir : TEXCOORD1;
+                float3 rayOrigin : TEXCOORD3;
+                float3 normal : TEXCOORD2;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+                UNITY_VERTEX_OUTPUT_STEREO
+            };
+
+            UNITY_INSTANCING_BUFFER_START(Props)
+                UNITY_DEFINE_INSTANCED_PROP(half4, _Color)
+                UNITY_DEFINE_INSTANCED_PROP(float, _FakeShadeStrength)
+            UNITY_INSTANCING_BUFFER_END(Props)
+
+            v2f vert (appdata v)
+            {
+                v2f o;
+                UNITY_SETUP_INSTANCE_ID(v);
+                UNITY_TRANSFER_INSTANCE_ID(v, o);
+                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
+                o.pos = TransformObjectToHClip(v.vertex.xyz);
+                o.projPos = ComputeScreenPos(o.pos);
+                o.rayOrigin = mul(unity_WorldToObject, float4(SAF_GetStereoSafeWorldSpaceCameraPos(), 1.0)).xyz;
+                o.viewDir = v.vertex.xyz - o.rayOrigin;
+                o.normal = v.normal;
+                return o;
+            }
+
+            half4 frag (v2f i) : SV_Target
+            {
+                UNITY_SETUP_INSTANCE_ID(i);
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
+
+                float2 screenUV = i.projPos.xy / i.projPos.w;
+                float sceneDepth = SAF_SampleDepthEye(screenUV);
+
+                float3 rd_world = normalize(mul(unity_ObjectToWorld, float4(i.viewDir, 0)).xyz);
+                float3 camForward = -UNITY_MATRIX_V[2].xyz;
+                float cosTheta = abs(dot(rd_world, camForward));
+                sceneDepth *= 1.0 / max(cosTheta, 0.001);
+                sceneDepth = max(sceneDepth, 0.0);
+
+                float3 rd = normalize(i.viewDir);
+                float3 ro = i.rayOrigin;
+
+                float r = 0.49;
+                float b = dot(ro, rd);
+                float c = dot(ro, ro) - r * r;
+                float d = b * b - c;
+
+                if (d < 0.0) discard;
+
+                float sqrtD = sqrt(d);
+                float t1 = -b - sqrtD;
+                float t2 = -b + sqrtD;
+
+                float worldDistK = length(mul(unity_ObjectToWorld, float4(rd, 0)).xyz);
+
+                float start = max(0, t1);
+                float end = t2;
+
+                float sceneDistModel = sceneDepth / worldDistK;
+                float end_dist = min(end, sceneDistModel);
+
+                float distance_ref = (end > sceneDistModel) ? length(ro + rd * end_dist) : r;
+
+                half4 col_ref = UNITY_ACCESS_INSTANCED_PROP(Props, _Color);
+                float distance_refSq = saturate(1/(distance_ref*distance_ref+1)-1/(1+r*r));
+                float refpower = UNITY_ACCESS_INSTANCED_PROP(Props, _FakeShadeStrength) * distance_refSq;
+
+                half4 col = col_ref;
+                col.a *= refpower;
+
+                #ifdef LOD_FADE_CROSSFADE
+                    col.a = col.a * saturate(unity_LODFade.x);
+                #endif
+
+                col.rgb = half3(1,1,1)*(1-col.a) + col.rgb * col.a;
+                col.a = 1;
+
+                return col;
+            }
+            ENDHLSL
+        }
+    }
+
+    // Built-in SubShader
     SubShader
     {
         Tags { "Queue"="Transparent+99" "RenderType"="Overlay" "IgnoreProjector"="True" }

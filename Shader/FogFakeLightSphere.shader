@@ -33,6 +33,181 @@ Shader "InPlanaria/SimpleFog/FogFakeLightSphere"
         [Enum(UnityEngine.Rendering.StencilOp)] _StencilFail ("Stencil Fail", Int) = 0
         [Enum(UnityEngine.Rendering.StencilOp)] _StencilZFail ("Stencil ZFail", Int) = 0
     }
+    // URP SubShader
+    SubShader
+    {
+        Tags { "Queue"="Transparent+98" "RenderType"="Overlay" "IgnoreProjector"="True" "RenderPipeline"="UniversalPipeline" }
+
+        Cull [_Cull]
+        ZTest [_ZTest]
+        ZWrite Off
+        BlendOp [_BlendOp]
+        Blend [_BlendSrcMode] [_BlendDstMode]
+
+        Stencil
+        {
+            Ref [_StencilRef]
+            ReadMask [_StencilReadMask]
+            WriteMask [_StencilWriteMask]
+            Comp [_StencilComp]
+            Pass [_StencilOp]
+            Fail [_StencilFail]
+            ZFail [_StencilZFail]
+        }
+
+        Pass
+        {
+            Tags { "LightMode"="UniversalForward" }
+
+            HLSLPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma shader_feature_local _FastMode_ON
+            #pragma shader_feature_local _Halo_ON
+            #pragma shader_feature_local _SpotMode_ON
+            #pragma shader_feature_local _FakeReflection_ON
+            #pragma shader_feature_local _FakeReflectSpotMode_ON
+            #pragma multi_compile _ LOD_FADE_CROSSFADE
+            #pragma multi_compile_instancing
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "SimpleAreaFogDepth.hlsl"
+            #include "SimpleAreaFogCommon.cginc"
+
+            struct appdata
+            {
+                float4 vertex : POSITION;
+                float3 normal : NORMAL;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+            };
+
+            struct v2f
+            {
+                float4 pos : SV_POSITION;
+                float4 projPos : TEXCOORD0;
+                float3 viewDir : TEXCOORD1;
+                float3 rayOrigin : TEXCOORD3;
+                float3 normal : TEXCOORD2;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+                UNITY_VERTEX_OUTPUT_STEREO
+            };
+
+            UNITY_INSTANCING_BUFFER_START(Props)
+                UNITY_DEFINE_INSTANCED_PROP(half4, _HaloColor)
+                UNITY_DEFINE_INSTANCED_PROP(float, _HaloStrength)
+                UNITY_DEFINE_INSTANCED_PROP(float, _HaloMeshEdgeFade)
+                UNITY_DEFINE_INSTANCED_PROP(float, _FakeReflectionStrength)
+                UNITY_DEFINE_INSTANCED_PROP(float, _FakeReflectionSpotAngle)
+                UNITY_DEFINE_INSTANCED_PROP(float, _FakeReflectionSpotAngleFade)
+            UNITY_INSTANCING_BUFFER_END(Props)
+
+            v2f vert (appdata v)
+            {
+                v2f o;
+                UNITY_SETUP_INSTANCE_ID(v);
+                UNITY_TRANSFER_INSTANCE_ID(v, o);
+                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
+                o.pos = TransformObjectToHClip(v.vertex.xyz);
+                o.projPos = ComputeScreenPos(o.pos);
+                o.rayOrigin = mul(unity_WorldToObject, float4(SAF_GetStereoSafeWorldSpaceCameraPos(), 1.0)).xyz;
+                o.viewDir = v.vertex.xyz - o.rayOrigin;
+                o.normal = v.normal;
+                return o;
+            }
+
+            half4 frag (v2f i) : SV_Target
+            {
+                UNITY_SETUP_INSTANCE_ID(i);
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
+
+                float2 screenUV = i.projPos.xy / i.projPos.w;
+                float sceneDepth = SAF_SampleDepthEye(screenUV);
+
+                float3 rd_world = normalize(mul(unity_ObjectToWorld, float4(i.viewDir, 0)).xyz);
+                float3 camForward = -UNITY_MATRIX_V[2].xyz;
+                float cosTheta = abs(dot(rd_world, camForward));
+                sceneDepth *= 1.0 / max(cosTheta, 0.001);
+                sceneDepth = max(sceneDepth, 0.0);
+
+                float3 rd = normalize(i.viewDir);
+                float3 ro = i.rayOrigin;
+
+                float r = 0.49;
+                float b = dot(ro, rd);
+                float c = dot(ro, ro) - r * r;
+                float d = b * b - c;
+
+                if (d < 0.0) discard;
+
+                float sqrtD = sqrt(d);
+                float t1 = -b - sqrtD;
+                float t2 = -b + sqrtD;
+
+                float worldDistK = length(mul(unity_ObjectToWorld, float4(rd, 0)).xyz);
+
+                float start = max(0, t1);
+                float end = t2;
+
+                float sceneDistModel = sceneDepth / worldDistK;
+                float end_dist = min(end, sceneDistModel);
+
+                #ifdef _Halo_ON
+                    float t_closest = clamp(dot(-ro, rd) / dot(rd, rd), start, end);
+                    float3 closest_point = ro + rd * t_closest;
+                    float distance_ray_to_center = length(closest_point);
+
+                    #ifdef _FastMode_ON
+                        float fogAmount = UNITY_ACCESS_INSTANCED_PROP(Props, _HaloStrength);
+                    #else
+                        float thickness = max(0, end_dist - start);
+                        float fogAmount = thickness * UNITY_ACCESS_INSTANCED_PROP(Props, _HaloStrength);
+                    #endif
+
+                    float normalDotView = abs(dot(normalize(i.normal), -rd));
+                    float meshEdgeFadeFactor = saturate(pow(normalDotView, UNITY_ACCESS_INSTANCED_PROP(Props, _HaloMeshEdgeFade)));
+
+                    half4 col = UNITY_ACCESS_INSTANCED_PROP(Props, _HaloColor);
+                    float distanceSq = 1/(distance_ray_to_center*distance_ray_to_center+1)-1/(1+r*r);
+                    col.a = distanceSq * fogAmount * meshEdgeFadeFactor * col.a;
+                    col.rgb = col.rgb * distanceSq;
+                #else
+                    half4 col = half4(0, 0, 0, 0);
+                #endif
+
+                #ifdef _FakeReflection_ON
+                    float distance_ref = (end > sceneDistModel) ? length(ro + rd * end_dist) : r;
+
+                    half4 col_ref = UNITY_ACCESS_INSTANCED_PROP(Props, _HaloColor);
+                    float distance_refSq = saturate(1/(distance_ref*distance_ref+1)-1/(1+r*r));
+                    float refpower = UNITY_ACCESS_INSTANCED_PROP(Props, _FakeReflectionStrength) * distance_refSq;
+
+                    #ifdef _FakeReflectSpotMode_ON
+                        float3 vec_to_ray_end = ro + rd * end_dist;
+                        float3 mesh_neg_z = float3(0, 0, -1);
+
+                        float cos_angle = dot(normalize(vec_to_ray_end), mesh_neg_z);
+                        float angle = acos(clamp(cos_angle, -1.0, 1.0)) * 57.2957795;
+
+                        float spot_angle = UNITY_ACCESS_INSTANCED_PROP(Props, _FakeReflectionSpotAngle);
+                        float spot_angle_fade = UNITY_ACCESS_INSTANCED_PROP(Props, _FakeReflectionSpotAngleFade);
+
+                        refpower *= step(angle, spot_angle) * saturate((spot_angle - angle) / max(spot_angle_fade, 0.001));
+                    #endif
+
+                    col.rgb += col_ref.rgb * refpower;
+                    col.a += col_ref.a * refpower;
+                #endif
+
+                #ifdef LOD_FADE_CROSSFADE
+                    col.a = col.a * saturate(unity_LODFade.x);
+                #endif
+
+                return col;
+            }
+            ENDHLSL
+        }
+    }
+
+    // Built-in SubShader
     SubShader
     {
         Tags { "Queue"="Transparent+98" "RenderType"="Overlay" "IgnoreProjector"="True" }
