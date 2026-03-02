@@ -23,10 +23,158 @@ Shader "InPlanaria/SimpleFog/FogBox"
         [Enum(UnityEngine.Rendering.StencilOp)] _StencilFail ("Stencil Fail", Int) = 0
         [Enum(UnityEngine.Rendering.StencilOp)] _StencilZFail ("Stencil ZFail", Int) = 0
     }
+    // URP SubShader
+    SubShader
+    {
+        Tags { "Queue"="Transparent+100" "RenderType"="Overlay" "IgnoreProjector"="True" "RenderPipeline"="UniversalPipeline" }
+
+        Cull [_Cull]
+        ZTest [_ZTest]
+        ZWrite Off
+        Blend [_BlendSrcMode] [_BlendDstMode]
+        BlendOp [_BlendOp]
+
+        Stencil
+        {
+            Ref [_StencilRef]
+            ReadMask [_StencilReadMask]
+            WriteMask [_StencilWriteMask]
+            Comp [_StencilComp]
+            Pass [_StencilOp]
+            Fail [_StencilFail]
+            ZFail [_StencilZFail]
+        }
+
+        Pass
+        {
+            Tags { "LightMode"="UniversalForward" }
+
+            HLSLPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma multi_compile_instancing
+            #pragma multi_compile _ LOD_FADE_CROSSFADE
+            #pragma multi_compile_local _FOGMODE_LINEAR _FOGMODE_EXPONENTIAL _FOGMODE_EXPONENTIALSQUARED
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "SimpleAreaFogDepth.hlsl"
+            #include "SimpleAreaFogCommon.cginc"
+
+            struct appdata
+            {
+                float4 vertex : POSITION;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+            };
+
+            struct v2f
+            {
+                float4 pos : SV_POSITION;
+                float4 projPos : TEXCOORD0;
+                float3 viewDir : TEXCOORD1;
+                float3 rayOrigin : TEXCOORD3;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+                UNITY_VERTEX_OUTPUT_STEREO
+            };
+
+            UNITY_INSTANCING_BUFFER_START(Props)
+                UNITY_DEFINE_INSTANCED_PROP(half4, _Color)
+                UNITY_DEFINE_INSTANCED_PROP(float, _Strength)
+                UNITY_DEFINE_INSTANCED_PROP(float, _EdgeFade)
+            UNITY_INSTANCING_BUFFER_END(Props)
+
+            v2f vert (appdata v)
+            {
+                v2f o;
+                UNITY_SETUP_INSTANCE_ID(v);
+                UNITY_INITIALIZE_OUTPUT(v2f, o);
+                UNITY_TRANSFER_INSTANCE_ID(v, o);
+                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
+                o.pos = TransformObjectToHClip(v.vertex.xyz);
+                o.projPos = ComputeScreenPos(o.pos);
+                o.rayOrigin = mul(unity_WorldToObject, float4(SAF_GetStereoSafeWorldSpaceCameraPos(), 1.0)).xyz;
+                o.viewDir = v.vertex.xyz - o.rayOrigin;
+                return o;
+            }
+
+            half4 frag (v2f i) : SV_Target
+            {
+                UNITY_SETUP_INSTANCE_ID(i);
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
+
+                float2 screenUV = i.projPos.xy / i.projPos.w;
+                float sceneDepth = SAF_SampleDepthEye(screenUV);
+
+                float3 rd_world = normalize(mul(unity_ObjectToWorld, float4(i.viewDir, 0)).xyz);
+                float3 camForward = -UNITY_MATRIX_V[2].xyz;
+                float cosTheta = abs(dot(rd_world, camForward));
+                sceneDepth *= 1.0 / max(cosTheta, 0.001);
+                sceneDepth = max(sceneDepth, 0.0);
+
+                float3 rd = normalize(i.viewDir);
+                float3 ro = i.rayOrigin;
+
+                float3 boxHalf = float3(0.49, 0.49, 0.49);
+                float3 invRd = rcp(rd);
+                float3 tNearV = (-boxHalf - ro) * invRd;
+                float3 tFarV  = ( boxHalf - ro) * invRd;
+                float3 tMinV = min(tNearV, tFarV);
+                float3 tMaxV = max(tNearV, tFarV);
+                float t1 = max(max(tMinV.x, tMinV.y), tMinV.z);
+                float t2 = min(min(tMaxV.x, tMaxV.y), tMaxV.z);
+
+                if (t2 < 0.0 || t1 > t2) discard;
+
+                float worldDistK = length(mul(unity_ObjectToWorld, float4(rd, 0)).xyz);
+
+                float start = max(0, t1);
+                float end = t2;
+
+                float sceneDistModel = sceneDepth / worldDistK;
+                end = min(end, sceneDistModel);
+
+                float thickness = max(0, end - start);
+                float worldThickness = thickness * worldDistK;
+                float fogAmount = 0.0;
+                #ifdef _FOGMODE_LINEAR
+                {
+                    fogAmount = worldThickness * UNITY_ACCESS_INSTANCED_PROP(Props, _Strength);
+                }
+                #elif _FOGMODE_EXPONENTIAL
+                {
+                    fogAmount = 1.0 - exp(-UNITY_ACCESS_INSTANCED_PROP(Props, _Strength) * worldThickness);
+                }
+                #elif _FOGMODE_EXPONENTIALSQUARED
+                {
+                    fogAmount = 1.0 - exp(-UNITY_ACCESS_INSTANCED_PROP(Props, _Strength) * worldThickness * worldThickness);
+                }
+                #endif
+
+                float edgeFadeWidth = UNITY_ACCESS_INSTANCED_PROP(Props, _EdgeFade);
+                float fresnel = 1.0;
+                {
+                    float3 midPoint = ro + rd * ((start + end) * 0.5);
+                    float3 distToFace = boxHalf - abs(midPoint);
+                    float minDist = min(min(distToFace.x, distToFace.y), distToFace.z);
+                    fresnel = saturate(minDist / edgeFadeWidth);
+                }
+
+                half4 col = UNITY_ACCESS_INSTANCED_PROP(Props, _Color);
+                col.a = saturate(fogAmount) * col.a * fresnel;
+
+                #ifdef LOD_FADE_CROSSFADE
+                    col.a = col.a * unity_LODFade.x;
+                #endif
+
+                return col;
+            }
+            ENDHLSL
+        }
+    }
+
+    // Built-in SubShader
     SubShader
     {
         Tags { "Queue"="Transparent+100" "RenderType"="Overlay" "IgnoreProjector"="True" }
-        
+
         // 設定: 両面描画、深度テスト常にパス、書き込みなし
         Cull [_Cull]
         ZTest [_ZTest]
